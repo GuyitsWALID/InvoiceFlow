@@ -1,0 +1,280 @@
+nvoiceFlow — Product Spec (Core Functionality & Design)
+
+Below is a focused, detailed rewrite that describes only the product: what InvoiceFlow must do and how it should look and behave. No timelines — purely the product scope, features, user flows, UI/UX and technical design details needed to build a global, production-ready MVP for small businesses everywhere.
+
+Product summary
+
+InvoiceFlow is an AI-first invoice and document automation product for small businesses globally. It automatically ingests invoices, receipts, and purchase orders from users’ email, extracts structured financial data with confidence scores, surfaces a human-in-the-loop review, and — once approved — syncs clean, validated entries to connected accounting software. The design prioritizes trust, clarity, speed, and global compatibility (multi-currency, multi-locale, multilingual).
+
+Target users & use cases (condensed)
+
+Small business owners, freelance professionals, and local bookkeeping teams handling 10–500 documents/month.
+
+Use cases: eliminate manual invoice entry, speed up bookkeeping, centralize document handling, reduce bookkeeping errors, and let accounting partners manage many clients efficiently.
+
+Core product capabilities
+1. Universal Ingestion
+
+Email connectors: secure OAuth for Gmail and Outlook (Microsoft Graph); IMAP fallback for other providers; ability to add multiple mailboxes per company.
+
+Detection: automatically detect invoices/receipts/POs from attachments and inline images using heuristics + MIME-type recognition + subject/body parsing (e.g., keywords “invoice”, “receipt”, “statement”, invoice-like patterns).
+
+File types: PDF (native & scanned), JPG, PNG, multi-page PDFs.
+
+Batch ingestion: support batch-processing of older emails (user-triggered import) and continuous, scheduled polling.
+
+Metadata capture: capture sender, from-address, subject, message-id, received timestamp, and attachment metadata.
+
+2. Robust Document OCR & Extraction
+
+Primary engine: integrate a production-grade Document AI (Google DocAI / Amazon Textract / Mindee) for layout-aware extraction.
+
+Fallback engines: lightweight OCR (Tesseract) and configurable post-processing for edge cases.
+
+Extracted fields (canonical):
+
+Vendor: name, email, address, tax ID (if present)
+
+Invoice identifiers: invoice number, PO number, internal refs
+
+Dates: invoice date, issue date, due date, payment terms
+
+Currency and locale-aware amounts
+
+Line items: description, quantity, unit price, tax per line, line total
+
+Totals: subtotal, total tax, discounts, grand total
+
+Payment details: bank account, IBAN, SWIFT (if present)
+
+Attached PDF/image URL(s) and OCR raw text
+
+Confidence model: numeric confidence per field + overall document confidence. Use this for triage and UI hinting.
+
+Multilingual capability: preconfigured models and parsers for major languages (English, Spanish, French, Arabic, Portuguese, Amharic, etc.), with language autodetection and locale-aware number/date parsing.
+
+3. Human-in-the-loop Review & Correction
+
+Inbox & triage UI: categorized tabs — Inbox (new), Needs Review (low-confidence), Approved (synced), Rejected, Duplicates. Sort & filter by vendor, date, amount, confidence, and tags.
+
+Invoice detail UI:
+
+Left: high-fidelity preview of original document (pdf viewer with zoom / page selector / highlight regions).
+
+Right: editable structured form with field-level confidence indicators and inline suggestions.
+
+Inline editing: changing a line item recalculates totals with validation.
+
+Highlight overlay: map fields detected on the document to their form field (click highlight to jump to document region).
+
+Actions: Approve & Sync, Approve Locally (mark approved but don't sync), Reject (with reason), Mark Duplicate, Reprocess (run alternative parser).
+
+Bulk actions: bulk-approve for high-confidence groups.
+
+Audit trail: every change is logged (who, what, when, previous value). Provide simple version history for an invoice.
+
+4. Accounting Sync (One-way, approval-gated)
+
+Primary integrations: QuickBooks Online (required MVP), Xero (option), connector plugin architecture for more systems.
+
+Sync behavior:
+
+On Approval → check vendor existence; if absent, create vendor using mapped fields.
+
+Create a Bill/Expense/Spend transaction with currency, line items, GL mapping, tax codes, and attach original PDF.
+
+Provide per-company mapping for default GL accounts, tax codes, and vendor mapping rules.
+
+Transaction reconciliation hint: add a unique InvoiceFlow external ID in the accounting record metadata for later tracing.
+
+Error handling: surface integration errors in the UI with actionable messages (duplicate in QuickBooks, rate-limited, auth expired). Provide retry and manual override options.
+
+Permissions & safety: require explicit user consent per-account to write to connected accounting systems.
+
+5. Organization & User Management
+
+Multi-user companies: roles — Admin, Accountant, Approver, Viewer. Role-based access controls for settings, approvals, and integrations.
+
+Company settings: default currency, default tax/G/L mapping, invoice validation rules (e.g., require invoice number), allowed file size, duplicate detection sensitivity.
+
+Onboarding experience: straightforward wizard to connect mailbox, run a sample ingestion, connect accounting provider, and approve first invoice.
+
+6. Duplicate & Fraud Detection
+
+Duplicate detection: heuristics (vendor + invoice number + total + date window), fuzzy matching, and confidence scoring; flag suspected duplicates and group them for review.
+
+Anomaly detection: flag outliers (sudden large amounts, changed bank details) and require manual approval. Provide warnings for potential invoice fraud (bank account mismatch vs historical).
+
+7. Security, Privacy & Compliance
+
+Encryption: TLS in transit; at-rest encryption for files and sensitive fields; encrypted storage for OAuth tokens (e.g., KMS).
+
+Access controls: role-based access and per-company tenant isolation.
+
+Data minimization: redact or mask sensitive fields in UI where appropriate (e.g., partial IBAN).
+
+Audit & logs: access logs, change logs, sync logs, and secure deletion workflows (data-retention policies).
+
+Privacy readiness: design for GDPR compliance (consent, data subject requests), with region-aware storage options if required.
+
+8. Reliability & Performance (user-facing expectations)
+
+Responsiveness: quick triage — inbox should list newly detected invoices within minutes; heavy OCR work should be async with progress UI.
+
+Retry & backoff: for failed extractions/integration calls, implement retry policies and admin-visible queues.
+
+Observability: surfaces per-company success/failure metrics and error reasons for admins.
+
+9. Analytics & Operational Insights (MVP-lite)
+
+Per-company dashboard: processed documents count, total processed value, average confidence, manual correction rate.
+
+Export: CSV export of invoices and audit logs for accounting or compliance.
+
+Key user flows (detailed)
+A. Onboarding (first-time admin)
+
+Admin creates company and account (email or SSO).
+
+Wizard: connect primary mailbox via OAuth → test fetch of recent emails.
+
+Connect QuickBooks (or skip for now).
+
+Set company defaults: currency, tax code, GL mapping skeleton.
+
+Ingest sample invoice (auto-detected) and demonstrate review → approve → simulated sync (dry run).
+
+B. Continuous ingestion & triage
+
+Mailbox polling receives email with attachment.
+
+Pre-filter identifies likely document; stores raw file.
+
+OCR + Document AI runs asynchronously; parsed JSON and confidence scores saved.
+
+If overall confidence >= threshold & rules satisfied → place in “High confidence” queue for optional bulk approve; else go to “Needs Review.”
+
+User receives in-app notification (and optional email) for items needing attention.
+
+C. Review & approve
+
+User opens invoice detail, reviews highlighted fields and original doc.
+
+Edits fields if needed; changes show recalculated totals and validation warnings.
+
+Approve & Sync triggers creation of vendor + bill in QuickBooks; UI shows progress and success/failure.
+
+Invoice marked “Synced” with a link to accounting system record (if available).
+
+D. Handling errors & exceptions
+
+Auth expiry: surface clear CTA to reconnect accounting/email provider.
+
+Parsing failure: auto-suggest manual upload or reprocess; provide “help improve parser” option to attach corrected mapping (for training).
+
+Accounting conflict: if QuickBooks returns duplicate/validation error, show detailed error and allow override (create locally without sync, or adjust fields, then retry).
+
+UI/UX & visual design (detailed)
+Visual system & tone
+
+Clean, minimal, enterprise-light: neutral backgrounds, readable sans-serif typography, strong whitespace.
+
+Primary accents: calm green for success/approved, amber for warnings/low-confidence, red only for critical errors.
+
+Use compact cards and tables for high-density lists; modals/drawers for deep edits.
+
+Layout & components
+
+Global header: company switcher, search bar (invoice number, vendor), notifications, user menu.
+
+Left rail: navigation (Inbox, Needs Review, Approved, Synced, Rejected, Duplicates, Settings, Integrations). Collapsible on mobile.
+
+Main list: each row shows vendor, invoice number, date, amount, confidence pill, and action buttons (quick approve, open detail). Supports bulk selection.
+
+Invoice detail: two-column layout — document viewer (left) + editable structured pane (right). Sticky action bar at top with Approve/Reject.
+
+Confidence visualization: small inline bars or numeric badges; hover shows why confidence is low and suggested corrections.
+
+Validation UI: real-time validation errors (e.g., totals mismatch) with explanatory tooltips.
+
+Mobile pattern: list-first design — tap to open full-screen review; use accordion for field groups (header, line items, totals).
+
+Interaction design & microcopy
+
+Use plain-language, trust-first copy (“We detected this as an invoice. Confirm totals before syncing.”)
+
+CTA clarity: “Approve & Sync to QuickBooks”, “Approve (Do not sync)”, “Reject — Mark as Non-invoice.”
+
+Soft confirmations and undo for destructive actions (undo last approve within X minutes).
+
+Accessibility: keyboard navigation, screen-reader labels, contrast ratios, focus states.
+
+Data model & API contracts (concise)
+Canonical invoice JSON (essential fields)
+{
+  "invoice_id":"string",
+  "company_id":"string",
+  "vendor":{"name":"string","email":"string","address":"string","tax_id":"string"},
+  "invoice_number":"string",
+  "po_number":"string",
+  "invoice_date":"YYYY-MM-DD",
+  "due_date":"YYYY-MM-DD",
+  "currency":"ISO-4217",
+  "line_items":[{"description":"string","qty":1,"unit_price":0.0,"tax":0.0,"amount":0.0}],
+  "subtotal":0.0,
+  "tax_total":0.0,
+  "discount":0.0,
+  "total":0.0,
+  "attachments":[{"url":"string","mime":"application/pdf"}],
+  "confidence":{"overall":0.95,"fields":{"vendor":0.98,"total":0.9}},
+  "raw_ocr":"string",
+  "source_email":{"message_id":"string","from":"string","subject":"string","received_at":"ISO8601"}
+}
+
+Integration contract behavior
+
+Auth: store refresh tokens encrypted; perform token refresh on-demand.
+
+Idempotency: use invoice_id as an external reference when creating bills in accounting systems to avoid duplicates.
+
+Sync webhook: record success/failure and push status update back to InvoiceFlow if accounting system emits callbacks.
+
+Security & privacy design decisions (high-level)
+
+Encrypt at rest using a KMS-managed key.
+
+Scoped OAuth permissions only for the minimum required scopes (read email attachments; write access to accounting as separate consent).
+
+Option to select regional data residency (where feasible) for EU/EAA customers.
+
+Data retention controls (admins can set 30/90/365-day retention and purge policies).
+
+Operational & product constraints
+
+Document-level confidence thresholds must be configurable per-company.
+
+Allow manual override for any automatic decision (create vendor, sync behavior).
+
+Maintain a small, explainable surface for manual corrections to bootstrap user trust (don’t hide “why” behind ML black boxes — show confidence and source snippet).
+
+Keep export and audit features simple and robust — accountants rely on CSVs and PDFs.
+
+Metrics to observe (product-focused)
+
+Extraction accuracy by field (vendor, invoice number, total)
+
+Manual corrections per 100 invoices
+
+Time from ingestion → approved
+
+Sync success rate to primary accounting provider
+
+Active pilot/company retention and weekly active users
+
+Extensibility & future-proofing notes
+
+Design parser layer to support plugin of new OCR/Document AI models and model ensembles.
+
+Make accounting connectors pluggable with standardized adapter interface (createVendor, createBill, attachFile, queryVendor).
+
+Keep data model flexible to support additional document types (receipts, POs, contracts) without schema migration.
