@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { 
   LayoutDashboard, 
   Inbox, 
@@ -92,13 +93,13 @@ export default function DashboardLayout({
       {/* Sidebar */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-300 ease-in-out lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-950 shadow-lg transition-transform duration-300 ease-in-out lg:static lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between border-b px-6">
+          <div className="flex h-16 items-center justify-between border-b dark:border-gray-800 px-6">
             <h1 className="text-xl font-bold text-primary">InvoiceFlow</h1>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -120,8 +121,8 @@ export default function DashboardLayout({
                   className={cn(
                     'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                     isActive
-                      ? 'bg-primary text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? 'bg-primary text-white dark:text-gray-800'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
@@ -133,13 +134,13 @@ export default function DashboardLayout({
           </nav>
 
           {/* User section */}
-          <div className="border-t p-4">
+          <div className="border-t dark:border-gray-800 p-4">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                   {user?.full_name || user?.email}
                 </p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user?.role}</p>
               </div>
               <Button
                 variant="ghost"
@@ -157,7 +158,7 @@ export default function DashboardLayout({
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="flex h-16 items-center justify-between border-b bg-white px-4 lg:px-6">
+        <header className="flex h-16 items-center justify-between border-b bg-white dark:bg-gray-950 dark:border-gray-800 px-4 lg:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden"
@@ -166,12 +167,12 @@ export default function DashboardLayout({
           </button>
           <div className="flex-1" />
           <div className="flex items-center space-x-4">
-            {/* Add notifications, search, etc. here */}
+            <ThemeToggle />
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 lg:p-6">
           {children}
         </main>
       </div>

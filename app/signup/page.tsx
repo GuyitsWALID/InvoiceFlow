@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -24,68 +25,55 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    // First, create the auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      // Call the API route to handle signup (uses service role to bypass RLS)
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      },
-    })
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          companyName,
+        }),
+      })
 
-    if (authError) {
-      setError(authError.message)
-      setLoading(false)
-      return
-    }
+      const data = await response.json()
 
-    if (authData.user) {
-      // Create company
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .insert([{ name: companyName }])
-        .select()
-        .single()
-
-      if (companyError) {
-        setError('Failed to create company: ' + companyError.message)
+      if (!response.ok) {
+        setError(data.error || 'Failed to create account')
         setLoading(false)
         return
       }
 
-      // Create user profile
-      const { error: userError } = await supabase
-        .from('users')
-        .insert([
-          {
-            id: authData.user.id,
-            email: email,
-            full_name: fullName,
-            company_id: companyData.id,
-            role: 'admin',
-          },
-        ])
+      // Sign in the user after successful signup
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      if (userError) {
-        setError('Failed to create user profile: ' + userError.message)
+      if (signInError) {
+        setError('Account created but failed to sign in: ' + signInError.message)
         setLoading(false)
         return
       }
 
-      // Create company settings
-      await supabase
-        .from('company_settings')
-        .insert([{ company_id: companyData.id }])
-
-      router.push('/onboarding')
+      // Redirect to dashboard
+      router.push('/dashboard')
       router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred')
+      setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">

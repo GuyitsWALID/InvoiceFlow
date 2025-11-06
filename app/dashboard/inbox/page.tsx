@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { UploadInvoiceDialog } from '@/components/upload-invoice-dialog'
 import { formatCurrency, formatDate, formatConfidence, getStatusColor, getConfidenceColor } from '@/lib/utils'
 import { FileText, Search, Filter, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
@@ -71,12 +72,9 @@ export default function InboxPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Inbox</h1>
-          <p className="text-gray-600 mt-1">Review and process incoming invoices</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Review and process incoming invoices</p>
         </div>
-        <Button>
-          <FileText className="mr-2 h-4 w-4" />
-          Upload Invoice
-        </Button>
+        <UploadInvoiceDialog onUploadComplete={loadInvoices} />
       </div>
 
       {/* Search and Filters */}
@@ -116,16 +114,21 @@ export default function InboxPage() {
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading invoices...</p>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading invoices...</p>
             </div>
           ) : filteredInvoices.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-4 text-lg font-medium text-gray-900">No invoices found</h3>
-              <p className="mt-2 text-sm text-gray-600">
-                {searchTerm ? 'Try adjusting your search' : 'Invoices will appear here when detected'}
+            <Card className="text-center py-12">
+              <FileText className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" />
+              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-gray-100">No invoices found</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                {searchTerm ? 'Try adjusting your search' : 'Upload your first invoice to get started'}
               </p>
-            </div>
+              {!searchTerm && (
+                <div className="mt-6">
+                  <UploadInvoiceDialog onUploadComplete={loadInvoices} />
+                </div>
+              )}
+            </Card>
           ) : (
             filteredInvoices.map((invoice) => (
               <Link key={invoice.id} href={`/dashboard/invoices/${invoice.id}`}>
@@ -140,7 +143,7 @@ export default function InboxPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                               {invoice.vendor?.name || 'Unknown Vendor'}
                             </p>
                             <Badge className={getStatusColor(invoice.status)}>
@@ -148,11 +151,11 @@ export default function InboxPage() {
                             </Badge>
                           </div>
                           <div className="flex items-center space-x-4 mt-1">
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
                               Invoice #{invoice.invoice_number || 'N/A'}
                             </p>
                             {invoice.invoice_date && (
-                              <p className="text-sm text-gray-600">
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
                                 {formatDate(invoice.invoice_date)}
                               </p>
                             )}
@@ -162,17 +165,17 @@ export default function InboxPage() {
                     </div>
                     <div className="flex items-center space-x-6">
                       <div className="text-right">
-                        <p className="text-lg font-semibold text-gray-900">
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {formatCurrency(invoice.total, invoice.currency)}
                         </p>
                         <div className="flex items-center space-x-1 mt-1">
-                          <span className="text-xs text-gray-500">Confidence:</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Confidence:</span>
                           <Badge variant="outline" className={getConfidenceColor(invoice.confidence.overall)}>
                             {formatConfidence(invoice.confidence.overall)}
                           </Badge>
                         </div>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400" />
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-600" />
                     </div>
                   </div>
                 </Card>
