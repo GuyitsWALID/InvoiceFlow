@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         total,
         status: 'inbox',
         confidence: { overall: 0, fields: {} },
-      })
+      } as any)
       .select('id')
       .single()
 
