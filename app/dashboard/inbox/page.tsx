@@ -27,16 +27,27 @@ export default function InboxPage() {
   const loadInvoices = async () => {
     setLoading(true)
     
+    console.log('📥 Loading invoices...')
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) {
+      console.error('❌ No session found')
+      return
+    }
 
-    const { data: userData } = await supabase
+    console.log('🔍 Looking up user company_id for:', session.user.id)
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('company_id')
       .eq('id', session.user.id)
       .single()
 
-    if (!userData) return
+    if (userError || !userData) {
+      console.error('❌ Failed to get user data:', userError)
+      return
+    }
+
+    console.log('✅ User company_id:', userData.company_id)
+    console.log('🔍 Fetching invoices for company:', userData.company_id)
 
     const { data, error } = await supabase
       .from('invoices')
@@ -48,8 +59,23 @@ export default function InboxPage() {
       .in('status', ['inbox', 'needs_review'])
       .order('created_at', { ascending: false })
 
+    console.log('📊 Query result:', {
+      error: error,
+      count: data?.length || 0,
+      invoices: data
+    })
+
     if (!error && data) {
+      console.log('✅ Setting invoices:', data.length)
       setInvoices(data as any)
+    } else if (error) {
+      console.error('❌ Error fetching invoices:', {
+        error: error,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
     }
 
     setLoading(false)
@@ -58,13 +84,27 @@ export default function InboxPage() {
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch = 
       invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.vendor?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      invoice.vendor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      !searchTerm // If no search term, show all invoices
     
     if (activeTab === 'all') return matchesSearch
     if (activeTab === 'inbox') return matchesSearch && invoice.status === 'inbox'
     if (activeTab === 'review') return matchesSearch && invoice.status === 'needs_review'
     
     return matchesSearch
+  })
+
+  console.log('🔍 Filtering:', {
+    totalInvoices: invoices.length,
+    filteredCount: filteredInvoices.length,
+    searchTerm,
+    activeTab,
+    invoices: invoices.map(i => ({
+      id: i.id,
+      status: i.status,
+      invoice_number: i.invoice_number,
+      vendor: i.vendor?.name || 'No vendor'
+    }))
   })
 
   return (
@@ -74,7 +114,16 @@ export default function InboxPage() {
           <h1 className="text-3xl font-bold">Inbox</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Review and process incoming invoices</p>
         </div>
-        <UploadInvoiceDialog onUploadComplete={loadInvoices} />
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={loadInvoices}
+            disabled={loading}
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <UploadInvoiceDialog onUploadComplete={loadInvoices} />
+        </div>
       </div>
 
       {/* Search and Filters */}

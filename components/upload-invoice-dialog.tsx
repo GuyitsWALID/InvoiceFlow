@@ -133,17 +133,37 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
       }
 
       // Get user's company_id
-      const { data: userData } = await supabase
+      console.log('🔍 Looking up user profile for:', session.user.id)
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('company_id')
         .eq('id', session.user.id)
         .single()
 
-      if (!userData) {
-        setError('User profile not found')
+      if (userError) {
+        console.error('❌ Failed to get user profile:', {
+          error: userError,
+          code: userError.code,
+          message: userError.message,
+          hint: userError.hint,
+          user_id: session.user.id
+        })
+        setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
         setUploading(false)
         return
       }
+
+      if (!userData) {
+        console.error('❌ No user record found for authenticated user:', session.user.id)
+        setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
+        setUploading(false)
+        return
+      }
+
+      console.log('✅ User profile found:', {
+        user_id: session.user.id,
+        company_id: userData.company_id
+      })
 
       const totalFiles = selectedFiles.length
       let uploadedCount = 0
@@ -169,6 +189,14 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
           .getPublicUrl(filePath)
 
         // Create invoice record
+        console.log('Attempting to insert invoice:', {
+          company_id: userData.company_id,
+          attachment_urls: [publicUrl],
+          mime_types: [file.type],
+          total: 0,
+          status: 'inbox'
+        })
+
         const { data: newInvoice, error: insertError } = await supabase.from('invoices').insert({
           company_id: userData.company_id,
           attachment_urls: [publicUrl],
@@ -180,11 +208,13 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
 
         if (insertError) {
           // Surface detailed insert errors in the browser console for debugging (RLS or validation issues)
-          try {
-            console.error('Invoice insert error:', JSON.stringify(insertError))
-          } catch (e) {
-            console.error('Invoice insert error (non-serializable):', insertError)
-          }
+          console.error('❌ Invoice insert FAILED:', {
+            error: insertError,
+            code: insertError.code,
+            message: insertError.message,
+            details: insertError.details,
+            hint: insertError.hint
+          })
           setError('Failed to create invoice record: ' + (insertError.message || JSON.stringify(insertError)))
           // Skip triggering OCR for this file
           uploadedCount++
@@ -192,13 +222,25 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
           continue
         }
 
+        console.log('✅ Invoice created successfully:', newInvoice)
+
         // Trigger OCR processing automatically
         if (newInvoice?.id) {
+          console.log('🔄 Triggering OCR for invoice:', newInvoice.id)
           fetch('/api/process-invoice', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ invoice_id: newInvoice.id })
-          }).catch(err => console.error('Failed to trigger OCR:', err))
+          })
+            .then(async (response) => {
+              const result = await response.json()
+              if (response.ok) {
+                console.log('✅ OCR completed:', result)
+              } else {
+                console.error('❌ OCR failed:', result)
+              }
+            })
+            .catch(err => console.error('❌ Failed to trigger OCR:', err))
         }
 
         uploadedCount++
@@ -239,17 +281,27 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         return
       }
 
-      const { data: userData } = await supabase
+      console.log('🔍 Looking up user profile for (Google Drive):', session.user.id)
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('company_id')
         .eq('id', session.user.id)
         .single()
 
-      if (!userData) {
-        setError('User profile not found')
+      if (userError || !userData) {
+        console.error('❌ Failed to get user profile (Google Drive):', {
+          error: userError,
+          user_id: session.user.id
+        })
+        setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
         setUploading(false)
         return
       }
+
+      console.log('✅ User profile found (Google Drive):', {
+        user_id: session.user.id,
+        company_id: userData.company_id
+      })
 
       const totalFiles = googleFiles.length
       let uploadedCount = 0
@@ -295,6 +347,14 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
             .getPublicUrl(filePath)
 
           // Create invoice record
+          console.log('Attempting to insert invoice (Google Drive):', {
+            company_id: userData.company_id,
+            attachment_urls: [publicUrl],
+            mime_types: [googleFile.mimeType],
+            total: 0,
+            status: 'inbox'
+          })
+
           const { data: newInvoice, error: insertError } = await supabase.from('invoices').insert({
             company_id: userData.company_id,
             attachment_urls: [publicUrl],
@@ -305,24 +365,38 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
           }).select('id').single()
 
           if (insertError) {
-            try {
-              console.error(`Invoice insert error for ${googleFile.name}:`, JSON.stringify(insertError))
-            } catch (e) {
-              console.error(`Invoice insert error for ${googleFile.name}: (non-serializable)`, insertError)
-            }
+            console.error('❌ Invoice insert FAILED (Google Drive):', {
+              error: insertError,
+              code: insertError.code,
+              message: insertError.message,
+              details: insertError.details,
+              hint: insertError.hint
+            })
             setError('Failed to create invoice record: ' + (insertError.message || JSON.stringify(insertError)))
             uploadedCount++
             setProgress((uploadedCount / totalFiles) * 100)
             continue
           }
 
+          console.log('✅ Invoice created successfully (Google Drive):', newInvoice)
+
           // Trigger OCR processing automatically
           if (newInvoice?.id) {
+            console.log('🔄 Triggering OCR for invoice (Google Drive):', newInvoice.id)
             fetch('/api/process-invoice', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ invoice_id: newInvoice.id })
-            }).catch(err => console.error('Failed to trigger OCR:', err))
+            })
+              .then(async (response) => {
+                const result = await response.json()
+                if (response.ok) {
+                  console.log('✅ OCR completed (Google Drive):', result)
+                } else {
+                  console.error('❌ OCR failed (Google Drive):', result)
+                }
+              })
+              .catch(err => console.error('❌ Failed to trigger OCR (Google Drive):', err))
           }
 
           uploadedCount++
@@ -366,17 +440,27 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         return
       }
 
-      const { data: userData } = await supabase
+      console.log('🔍 Looking up user profile for (Dropbox):', session.user.id)
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('company_id')
         .eq('id', session.user.id)
         .single()
 
-      if (!userData) {
-        setError('User profile not found')
+      if (userError || !userData) {
+        console.error('❌ Failed to get user profile (Dropbox):', {
+          error: userError,
+          user_id: session.user.id
+        })
+        setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
         setUploading(false)
         return
       }
+
+      console.log('✅ User profile found (Dropbox):', {
+        user_id: session.user.id,
+        company_id: userData.company_id
+      })
 
       const totalFiles = dropboxFiles.length
       let uploadedCount = 0
@@ -422,6 +506,14 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
             .getPublicUrl(filePath)
 
           // Create invoice record
+          console.log('Attempting to insert invoice (Dropbox):', {
+            company_id: userData.company_id,
+            attachment_urls: [publicUrl],
+            mime_types: [mimeType],
+            total: 0,
+            status: 'inbox'
+          })
+
           const { data: newInvoice, error: insertError } = await supabase.from('invoices').insert({
             company_id: userData.company_id,
             attachment_urls: [publicUrl],
@@ -432,24 +524,38 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
           }).select('id').single()
 
           if (insertError) {
-            try {
-              console.error(`Invoice insert error for ${dropboxFile.name}:`, JSON.stringify(insertError))
-            } catch (e) {
-              console.error(`Invoice insert error for ${dropboxFile.name}: (non-serializable)`, insertError)
-            }
+            console.error('❌ Invoice insert FAILED (Dropbox):', {
+              error: insertError,
+              code: insertError.code,
+              message: insertError.message,
+              details: insertError.details,
+              hint: insertError.hint
+            })
             setError('Failed to create invoice record: ' + (insertError.message || JSON.stringify(insertError)))
             uploadedCount++
             setProgress((uploadedCount / totalFiles) * 100)
             continue
           }
 
+          console.log('✅ Invoice created successfully (Dropbox):', newInvoice)
+
           // Trigger OCR processing automatically
           if (newInvoice?.id) {
+            console.log('🔄 Triggering OCR for invoice (Dropbox):', newInvoice.id)
             fetch('/api/process-invoice', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ invoice_id: newInvoice.id })
-            }).catch(err => console.error('Failed to trigger OCR:', err))
+            })
+              .then(async (response) => {
+                const result = await response.json()
+                if (response.ok) {
+                  console.log('✅ OCR completed (Dropbox):', result)
+                } else {
+                  console.error('❌ OCR failed (Dropbox):', result)
+                }
+              })
+              .catch(err => console.error('❌ Failed to trigger OCR (Dropbox):', err))
           }
 
           uploadedCount++

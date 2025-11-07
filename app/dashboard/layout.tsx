@@ -17,7 +17,9 @@ import {
   BarChart3,
   Menu,
   X,
-  LogOut
+  LogOut,
+  CheckCircle2,
+  Cloud
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -32,8 +34,8 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Inbox', href: '/dashboard/inbox', icon: Inbox },
   { name: 'Needs Review', href: '/dashboard/review', icon: FileCheck },
-  { name: 'Approved', href: '/dashboard/approved', icon: FileCheck },
-  { name: 'Synced', href: '/dashboard/synced', icon: FileCheck },
+  { name: 'Approved', href: '/dashboard/approved', icon: CheckCircle2 },
+  { name: 'Synced', href: '/dashboard/synced', icon: Cloud },
   { name: 'Rejected', href: '/dashboard/rejected', icon: FileX },
   { name: 'Duplicates', href: '/dashboard/duplicates', icon: Copy },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },

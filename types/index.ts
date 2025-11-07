@@ -98,6 +98,7 @@ export interface Invoice {
   status: InvoiceStatus
   confidence: ConfidenceScore
   raw_ocr?: string
+  extracted_data?: Record<string, any>
   source_email?: SourceEmail
   attachment_urls: string[]
   mime_types: string[]

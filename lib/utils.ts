@@ -25,9 +25,12 @@ export function formatConfidence(confidence: number): string {
 }
 
 export function getConfidenceColor(confidence: number): string {
-  if (confidence >= 0.9) return 'text-green-600 bg-green-50'
-  if (confidence >= 0.7) return 'text-amber-600 bg-amber-50'
-  return 'text-red-600 bg-red-50'
+  // Handle both 0-1 and 0-100 ranges
+  const normalizedConfidence = confidence > 1 ? confidence / 100 : confidence
+  
+  if (normalizedConfidence >= 0.9) return 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950'
+  if (normalizedConfidence >= 0.7) return 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950'
+  return 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950'
 }
 
 export function getStatusColor(status: string): string {
