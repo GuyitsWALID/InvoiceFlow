@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import { Upload, HardDrive, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
@@ -24,7 +25,52 @@ interface UploadInvoiceDialogProps {
   onUploadComplete?: () => void
 }
 
-export function UploadInvoiceDialog({ onUploadComplete }: UploadInvoiceDialogProps) {
+// Separate component that uses useSearchParams with Suspense boundary
+function TokenHandler({ 
+  onTokensDetected 
+}: { 
+  onTokensDetected: (googleTokens: any, dropboxTokens: any) => void 
+}) {
+  const searchParams = useSearchParams()
+
+  React.useEffect(() => {
+    const googleTokensParam = searchParams.get('google_tokens')
+    const dropboxTokensParam = searchParams.get('dropbox_tokens')
+
+    let googleTokens: any = null
+    let dropboxTokens: any = null
+
+    if (googleTokensParam) {
+      try {
+        googleTokens = JSON.parse(decodeURIComponent(googleTokensParam))
+      } catch (err) {
+        console.error('Failed to parse Google tokens:', err)
+      }
+    }
+
+    if (dropboxTokensParam) {
+      try {
+        dropboxTokens = JSON.parse(decodeURIComponent(dropboxTokensParam))
+      } catch (err) {
+        console.error('Failed to parse Dropbox tokens:', err)
+      }
+    }
+
+    if (googleTokens || dropboxTokens) {
+      // Clean up URL once tokens are detected
+      try {
+        window.history.replaceState({}, '', '/dashboard/inbox')
+      } catch (err) {
+        // ignore history errors
+      }
+      onTokensDetected(googleTokens, dropboxTokens)
+    }
+  }, [searchParams, onTokensDetected])
+
+  return null
+}
+
+function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogProps) {
   const [open, setOpen] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [progress, setProgress] = React.useState(0)
@@ -37,39 +83,19 @@ export function UploadInvoiceDialog({ onUploadComplete }: UploadInvoiceDialogPro
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
-  const searchParams = useSearchParams()
 
-  // Check for Google and Dropbox tokens in URL on mount
-  React.useEffect(() => {
-    const googleTokensParam = searchParams.get('google_tokens')
-    const dropboxTokensParam = searchParams.get('dropbox_tokens')
-    
-    if (googleTokensParam) {
-      try {
-        const tokens = JSON.parse(decodeURIComponent(googleTokensParam))
-        setGoogleTokens(tokens)
-        setShowGooglePicker(true)
-        setOpen(true)
-        // Clean up URL
-        window.history.replaceState({}, '', '/dashboard/inbox')
-      } catch (err) {
-        console.error('Failed to parse Google tokens:', err)
-      }
+  const handleTokensDetected = React.useCallback((google: any, dropbox: any) => {
+    if (google) {
+      setGoogleTokens(google)
+      setShowGooglePicker(true)
+      setOpen(true)
     }
-    
-    if (dropboxTokensParam) {
-      try {
-        const tokens = JSON.parse(decodeURIComponent(dropboxTokensParam))
-        setDropboxTokens(tokens)
-        setShowDropboxPicker(true)
-        setOpen(true)
-        // Clean up URL
-        window.history.replaceState({}, '', '/dashboard/inbox')
-      } catch (err) {
-        console.error('Failed to parse Dropbox tokens:', err)
-      }
+    if (dropbox) {
+      setDropboxTokens(dropbox)
+      setShowDropboxPicker(true)
+      setOpen(true)
     }
-  }, [searchParams])
+  }, [])
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -449,6 +475,7 @@ export function UploadInvoiceDialog({ onUploadComplete }: UploadInvoiceDialogPro
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
@@ -621,5 +648,18 @@ export function UploadInvoiceDialog({ onUploadComplete }: UploadInvoiceDialogPro
         </div>
       </DialogContent>
     </Dialog>
+    <Suspense fallback={null}>
+      <TokenHandler onTokensDetected={handleTokensDetected} />
+    </Suspense>
+  </>
+  )
+}
+
+// Main component with Suspense boundary
+export function UploadInvoiceDialog({ onUploadComplete }: UploadInvoiceDialogProps) {
+  return (
+    <Suspense fallback={<Button disabled><Upload className="mr-2 h-4 w-4" />Upload Invoice</Button>}>
+      <UploadInvoiceDialogContent onUploadComplete={onUploadComplete} />
+    </Suspense>
   )
 }
