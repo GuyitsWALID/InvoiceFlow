@@ -95,6 +95,7 @@ export interface Invoice {
   tax_total: number
   discount: number
   total: number
+  amount: number | string // Total amount (can be number or string from DB)
   status: InvoiceStatus
   confidence: ConfidenceScore
   raw_ocr?: string
@@ -112,6 +113,13 @@ export interface Invoice {
   updated_at: string
   line_items?: LineItem[]
   vendor?: Vendor
+  // Accounting sync fields
+  sync_status?: 'not_synced' | 'pending' | 'synced' | 'failed'
+  external_bill_id?: string
+  external_bill_url?: string
+  last_sync_attempt_at?: string
+  last_synced_at?: string
+  notes?: string
 }
 
 export interface AuditLog {

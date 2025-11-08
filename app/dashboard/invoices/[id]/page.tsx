@@ -99,6 +99,7 @@ export default function InvoiceDetailPage() {
 
     const toastId = toast.loading('Approving invoice...')
 
+    // Step 1: Approve the invoice
     const { error } = await supabase
       .from('invoices')
       .update({
@@ -109,10 +110,70 @@ export default function InvoiceDetailPage() {
 
     if (error) {
       toast.error('Failed to approve invoice', { id: toastId })
-    } else {
-      toast.success('✅ Invoice approved successfully!', { id: toastId })
-      setTimeout(() => router.push('/dashboard/inbox'), 1000)
+      return
     }
+
+    toast.success('✅ Invoice approved successfully!', { id: toastId })
+
+    // Step 2: Check if there's an active accounting connection
+    const { data: connection } = await supabase
+      .from('accounting_connections')
+      .select('*')
+      .eq('company_id', invoice.company_id)
+      .eq('is_active', true)
+      .eq('is_default', true)
+      .maybeSingle()
+
+    // Step 3: If connection exists, sync to accounting platform
+    if (connection) {
+      const syncToastId = toast.loading(`Syncing to ${connection.provider_company_name || connection.provider}...`)
+      
+      try {
+        const response = await fetch('/api/accounting/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice_id: invoiceId })
+        })
+
+        const result = await response.json()
+
+        if (response.ok && result.success) {
+          toast.success(
+            `🎉 Synced to ${connection.provider_company_name || connection.provider}!`,
+            { id: syncToastId }
+          )
+          
+          // If bill URL is available, show it
+          if (result.bill_url) {
+            toast.info(
+              <div>
+                Bill created successfully!{' '}
+                <a 
+                  href={result.bill_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="underline font-medium"
+                >
+                  View in {connection.provider_company_name || connection.provider}
+                </a>
+              </div>,
+              { duration: 8000 }
+            )
+          }
+        } else {
+          toast.error(
+            `Failed to sync: ${result.error || 'Unknown error'}`,
+            { id: syncToastId }
+          )
+        }
+      } catch (error) {
+        toast.error('Failed to sync invoice to accounting platform', { id: syncToastId })
+        console.error('Sync error:', error)
+      }
+    }
+
+    // Redirect after a delay
+    setTimeout(() => router.push('/dashboard/inbox'), 2000)
   }
 
   const handleReject = async () => {

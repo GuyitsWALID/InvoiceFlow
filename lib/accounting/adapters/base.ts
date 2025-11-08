@@ -59,27 +59,31 @@ export interface LineItem {
 }
 
 export interface BillPayload {
-  invoice_flow_id: string // For idempotency
-  vendor_id: string
   invoice_number: string
   invoice_date: string
   due_date?: string
-  currency: string
-  line_items: LineItem[]
+  vendor_id: string
+  vendor_email?: string
+  line_items: Array<{
+    description: string
+    amount: number
+    quantity?: number
+    account_ref?: string
+  }>
   subtotal: number
   tax_total: number
   total: number
-  discount?: number
-  payment_terms?: string
-  memo?: string
+  currency: string
+  notes?: string
 }
 
 export interface BillResult {
-  external_bill_id: string
-  external_bill_url?: string
-  external_vendor_id: string
+  success: boolean
+  bill_id?: string
+  bill_url?: string
+  vendor_id?: string
   created_at: Date
-  provider_response: Record<string, any>
+  error?: string
 }
 
 export interface SyncError {
@@ -205,6 +209,14 @@ export const PROVIDER_CONFIG = {
     scopes: ['read:business', 'write:bill'],
     icon: '/icons/wave.svg',
     color: '#4D4D4D'
+  },
+  excel: {
+    name: 'Excel',
+    oauth_url: '', // No OAuth needed
+    api_url: '', // Local file system
+    scopes: [],
+    icon: '/icons/excel.svg',
+    color: '#217346'
   }
 } as const
 

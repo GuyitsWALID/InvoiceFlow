@@ -38,7 +38,6 @@ const navigation = [
   { name: 'Synced', href: '/dashboard/synced', icon: Cloud },
   { name: 'Rejected', href: '/dashboard/rejected', icon: FileX },
   { name: 'Duplicates', href: '/dashboard/duplicates', icon: Copy },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Team', href: '/dashboard/team', icon: Users },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]

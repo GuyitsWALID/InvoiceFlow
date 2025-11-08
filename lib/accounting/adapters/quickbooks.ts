@@ -121,6 +121,126 @@ export class QuickBooksAdapter extends AccountingAdapter {
   }
 
   /**
+   * Static helper to create a bill with tokens directly (for API routes)
+   */
+  static async createBillWithTokens(
+    accessToken: string,
+    refreshToken: string,
+    realmId: string,
+    payload: BillPayload,
+    vendorName: string
+  ): Promise<BillResult> {
+    try {
+      const environment = process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox'
+      const baseUrl = environment === 'sandbox'
+        ? 'https://sandbox-quickbooks.api.intuit.com/v3'
+        : 'https://quickbooks.api.intuit.com/v3'
+
+      // Step 1: Search for vendor by name
+      const vendorQuery = `SELECT * FROM Vendor WHERE DisplayName = '${vendorName.replace(/'/g, "\\'")}' MAXRESULTS 1`
+      const vendorSearchUrl = `${baseUrl}/company/${realmId}/query?query=${encodeURIComponent(vendorQuery)}`
+      
+      let vendorResponse = await fetch(vendorSearchUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+        },
+      })
+
+      if (!vendorResponse.ok) {
+        throw new Error(`Failed to search for vendor: ${vendorResponse.statusText}`)
+      }
+
+      let vendorData = await vendorResponse.json()
+      let vendorId = vendorData.QueryResponse?.Vendor?.[0]?.Id
+
+      // Step 2: Create vendor if not found
+      if (!vendorId) {
+        const createVendorUrl = `${baseUrl}/company/${realmId}/vendor`
+        const vendorCreateResponse = await fetch(createVendorUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            DisplayName: vendorName,
+            PrimaryEmailAddr: payload.vendor_email ? { Address: payload.vendor_email } : undefined,
+          }),
+        })
+
+        if (!vendorCreateResponse.ok) {
+          throw new Error(`Failed to create vendor: ${vendorCreateResponse.statusText}`)
+        }
+
+        const vendorCreateData = await vendorCreateResponse.json()
+        vendorId = vendorCreateData.Vendor.Id
+      }
+
+      // Step 3: Create bill
+      const billData = {
+        VendorRef: {
+          value: vendorId,
+        },
+        TxnDate: payload.invoice_date,
+        DueDate: payload.due_date || payload.invoice_date,
+        DocNumber: payload.invoice_number,
+        PrivateNote: payload.notes,
+        Line: payload.line_items.map((item, index) => ({
+          Id: (index + 1).toString(),
+          Amount: item.amount,
+          DetailType: 'AccountBasedExpenseLineDetail',
+          Description: item.description,
+          AccountBasedExpenseLineDetail: {
+            AccountRef: {
+              value: '1', // Default expense account
+            },
+            BillableStatus: 'NotBillable',
+          },
+        })),
+        TotalAmt: payload.total,
+      }
+
+      const billUrl = `${baseUrl}/company/${realmId}/bill`
+      const billResponse = await fetch(billUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(billData),
+      })
+
+      if (!billResponse.ok) {
+        const errorData = await billResponse.json()
+        throw new Error(`Failed to create bill: ${errorData.Fault?.Error?.[0]?.Message || billResponse.statusText}`)
+      }
+
+      const billResponseData = await billResponse.json()
+      const bill = billResponseData.Bill
+
+      return {
+        success: true,
+        bill_id: bill.Id,
+        bill_url: environment === 'sandbox'
+          ? `https://app.sandbox.qbo.intuit.com/app/bill?txnId=${bill.Id}`
+          : `https://app.qbo.intuit.com/app/bill?txnId=${bill.Id}`,
+        vendor_id: vendorId,
+        created_at: new Date(),
+      }
+    } catch (error: any) {
+      console.error('QuickBooks createBill error:', error)
+      return {
+        success: false,
+        created_at: new Date(),
+        error: error.message || 'Failed to create bill in QuickBooks',
+      }
+    }
+  }
+
+  /**
    * Refresh access token using refresh token
    */
   async refreshTokenIfNeeded(): Promise<void> {
@@ -244,12 +364,6 @@ export class QuickBooksAdapter extends AccountingAdapter {
   async createBill(payload: BillPayload): Promise<BillResult> {
     await this.refreshTokenIfNeeded()
 
-    // Check idempotency first
-    const exists = await this.checkIdempotency(payload.invoice_flow_id)
-    if (exists) {
-      throw new Error('Bill already exists for this invoice')
-    }
-
     // Map to QuickBooks format
     const billData = this.mapBillPayload(payload)
 
@@ -261,11 +375,11 @@ export class QuickBooksAdapter extends AccountingAdapter {
     const bill = response.Bill
 
     return {
-      external_bill_id: bill.Id,
-      external_bill_url: `https://app.sandbox.qbo.intuit.com/app/bill?txnId=${bill.Id}`,
-      external_vendor_id: payload.vendor_id,
+      success: true,
+      bill_id: bill.Id,
+      bill_url: `https://app.sandbox.qbo.intuit.com/app/bill?txnId=${bill.Id}`,
+      vendor_id: payload.vendor_id,
       created_at: new Date(),
-      provider_response: response,
     }
   }
 
@@ -314,9 +428,9 @@ export class QuickBooksAdapter extends AccountingAdapter {
         value: payload.vendor_id,
       },
       TxnDate: payload.invoice_date,
-      DueDate: payload.due_date,
-      DocNumber: payload.invoice_flow_id, // Use as idempotency key
-      PrivateNote: payload.memo,
+      DueDate: payload.due_date || payload.invoice_date,
+      DocNumber: payload.invoice_number,
+      PrivateNote: payload.notes,
       Line: payload.line_items.map((item, index) => ({
         Id: (index + 1).toString(),
         Amount: item.amount,
@@ -324,10 +438,9 @@ export class QuickBooksAdapter extends AccountingAdapter {
         Description: item.description,
         AccountBasedExpenseLineDetail: {
           AccountRef: {
-            value: item.gl_account || '1', // Default expense account
+            value: item.account_ref || '1', // Default expense account
           },
           BillableStatus: 'NotBillable',
-          TaxCodeRef: item.tax_code ? { value: item.tax_code } : undefined,
         },
       })),
       TotalAmt: payload.total,
