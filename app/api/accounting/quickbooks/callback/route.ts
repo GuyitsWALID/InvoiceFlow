@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { QuickBooksAdapter } from '@/lib/accounting/adapters/quickbooks'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 /**
  * OAuth 2.0 Callback Handler for QuickBooks
  * 

@@ -4,6 +4,9 @@ import { QuickBooksAdapter } from '@/lib/accounting/adapters/quickbooks'
 import { ExcelAdapter } from '@/lib/accounting/adapters/excel'
 import type { BillPayload, BillResult } from '@/lib/accounting/adapters/base'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerClient()

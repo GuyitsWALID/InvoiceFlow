@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -62,6 +62,18 @@ interface SyncLog {
 }
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <SettingsPageContent />
+    </Suspense>
+  )
+}
+
+function SettingsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()

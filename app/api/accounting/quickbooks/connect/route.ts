@@ -3,6 +3,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import { QuickBooksAdapter } from '@/lib/accounting/adapters/quickbooks'
 import { randomBytes } from 'crypto'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 /**
  * Initiate QuickBooks OAuth 2.0 Flow
  * 
