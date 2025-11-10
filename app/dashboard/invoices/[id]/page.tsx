@@ -32,6 +32,7 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
+  const [extractingOCR, setExtractingOCR] = useState(false)
   const [zoom, setZoom] = useState(100)
 
   useEffect(() => {
@@ -76,14 +77,61 @@ export default function InvoiceDetailPage() {
       if (response.ok) {
         toast.success('✨ AI analysis completed! Invoice data extracted successfully.', { id: toastId })
         await loadInvoice()
+      } else if (response.status === 429 || response.status === 503) {
+        // Handle rate limit (429) or model loading (503) with auto-retry
+        const retryAfter = result.retry_after || 30
+        const errorMsg = response.status === 503 
+          ? '🔄 AI model is starting up...' 
+          : '⏱️ Rate limit exceeded...'
+        
+        toast.info(
+          `${errorMsg} Retrying in ${retryAfter} seconds...`,
+          { id: toastId, duration: (retryAfter + 5) * 1000 }
+        )
+        
+        // Auto-retry after the specified delay
+        setTimeout(() => {
+          toast.info('🔄 Retrying AI analysis...', { duration: 3000 })
+          handleAnalyzeWithAI()
+        }, retryAfter * 1000)
       } else {
         toast.error(`❌ AI analysis failed: ${result.error || 'Unknown error'}`, { id: toastId })
       }
     } catch (error) {
       toast.error('❌ Failed to analyze invoice with AI', { id: toastId })
+    } finally {
+      if (!analyzing) {
+        setAnalyzing(false)
+      }
     }
+  }
 
-    setAnalyzing(false)
+  const handleExtractOCR = async () => {
+    setExtractingOCR(true)
+    const toastId = toast.loading('📄 Extracting text from invoice...')
+
+    try {
+      const response = await fetch('/api/process-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success(`✅ OCR extraction completed! Extracted ${result.text_length || 0} characters.`, { id: toastId })
+        await loadInvoice()
+      } else {
+        toast.error(`❌ OCR extraction failed: ${result.error || 'Unknown error'}`, { id: toastId })
+        console.error('OCR extraction error:', result)
+      }
+    } catch (error) {
+      toast.error('❌ Failed to extract OCR text', { id: toastId })
+      console.error('OCR extraction error:', error)
+    } finally {
+      setExtractingOCR(false)
+    }
   }
 
   const handleApprove = async () => {
@@ -337,130 +385,423 @@ export default function InvoiceDetailPage() {
               )}
 
               {/* AI Analyze Button */}
-              <div className="mt-6">
+              <div className="mt-6 space-y-3">
+                {/* Extract OCR Button (Manual Trigger) */}
+                <Button
+                  onClick={handleExtractOCR}
+                  disabled={extractingOCR}
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                >
+                  {extractingOCR ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Extracting OCR text...
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="mr-2 h-5 w-5" />
+                      {invoice.raw_ocr ? 'Re-extract OCR Text' : 'Extract OCR Text'}
+                    </>
+                  )}
+                </Button>
+
+                {/* AI Analyze Button */}
                 <Button
                   onClick={handleAnalyzeWithAI}
-                  disabled={analyzing}
+                  disabled={analyzing || !invoice.raw_ocr}
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                   size="lg"
                 >
                   {analyzing ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      {invoice.raw_ocr ? 'Analyzing with AI...' : 'Extracting OCR & Analyzing...'}
+                      Analyzing with AI...
                     </>
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-5 w-5" />
-                      {invoice.raw_ocr ? 'Analyze with AI' : 'Extract OCR & Analyze with AI'}
+                      Analyze with AI
                     </>
                   )}
                 </Button>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                  {invoice.raw_ocr 
-                    ? 'Uses Google Gemini to extract structured data from the invoice'
-                    : 'First extracts OCR text, then uses AI to analyze invoice data'
-                  }
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                  Step 1: Extract OCR text → Step 2: Analyze with AI
                 </p>
               </div>
             </Card>
 
-            {/* Extracted Data Preview (only shows after AI analysis) */}
+            {/* Detailed AI Analysis Card (only shows after AI analysis) */}
             {invoice.extracted_data && (
-              <Card className="p-6 border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950">
-                <h2 className="text-lg font-semibold mb-4 flex items-center">
-                  <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
-                  AI Extracted Data
-                </h2>
-                
-                {/* Vendor Information */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Vendor Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white dark:bg-gray-900 p-4 rounded-lg">
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Vendor Name</p>
-                      <p className="font-semibold">{invoice.vendor?.name || invoice.extracted_data?.vendor?.name || 'N/A'}</p>
-                    </div>
-                    {invoice.vendor?.email && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">Email</p>
-                        <p className="text-sm">{invoice.vendor.email}</p>
+              <>
+                {/* Card 1: Comprehensive Analysis Details */}
+                <Card className="p-6 border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950">
+                  <h2 className="text-lg font-semibold mb-6 flex items-center">
+                    <Sparkles className="h-5 w-5 mr-2 text-purple-600" />
+                    Detailed AI Analysis
+                  </h2>
+                  
+                  {/* 1. General Invoice Information */}
+                  {invoice.extracted_data.general_info && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                        1. General Invoice Information
+                      </h3>
+                      <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 w-1/3">Invoice Number</td>
+                              <td className="px-4 py-3 font-semibold">{invoice.extracted_data.general_info.invoice_number || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Date of Issue</td>
+                              <td className="px-4 py-3">{invoice.extracted_data.general_info.date_of_issue || 'N/A'}</td>
+                            </tr>
+                            {invoice.extracted_data.general_info.due_date && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Due Date</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.general_info.due_date}</td>
+                              </tr>
+                            )}
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Currency</td>
+                              <td className="px-4 py-3">
+                                {invoice.extracted_data.general_info.currency} 
+                                {invoice.extracted_data.general_info.currency_symbol && 
+                                  ` (${invoice.extracted_data.general_info.currency_symbol})`}
+                              </td>
+                            </tr>
+                            {invoice.extracted_data.general_info.payment_terms && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Payment Terms</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.general_info.payment_terms}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.general_info.po_number && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">PO Number</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.general_info.po_number}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-                    )}
-                    {invoice.vendor?.address && (
-                      <div className="col-span-2">
-                        <p className="text-xs font-medium text-gray-500 mb-1">Address</p>
-                        <p className="text-sm">{invoice.vendor.address}</p>
+                    </div>
+                  )}
+
+                  {/* 2. Seller Details */}
+                  {invoice.extracted_data.seller && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                        2. Seller Details
+                      </h3>
+                      <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 w-1/3">Company Name</td>
+                              <td className="px-4 py-3 font-semibold">{invoice.extracted_data.seller.company_name || 'N/A'}</td>
+                            </tr>
+                            {invoice.extracted_data.seller.address && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Address</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.seller.address}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.seller.tax_id && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Tax ID</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.seller.tax_id}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.seller.iban && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">IBAN</td>
+                                <td className="px-4 py-3 font-mono text-xs">{invoice.extracted_data.seller.iban}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.seller.email && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Email</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.seller.email}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.seller.phone && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Phone</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.seller.phone}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Client Details */}
+                  {invoice.extracted_data.client && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                        3. Client Details
+                      </h3>
+                      <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 w-1/3">Company Name</td>
+                              <td className="px-4 py-3 font-semibold">{invoice.extracted_data.client.company_name || 'N/A'}</td>
+                            </tr>
+                            {invoice.extracted_data.client.address && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Address</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.client.address}</td>
+                              </tr>
+                            )}
+                            {invoice.extracted_data.client.tax_id && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Tax ID</td>
+                                <td className="px-4 py-3">{invoice.extracted_data.client.tax_id}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. Itemized Products & Services */}
+                  {invoice.extracted_data.line_items && invoice.extracted_data.line_items.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                        4. Itemized Products & Services
+                      </h3>
+                      <div className="bg-white dark:bg-gray-900 rounded-lg overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold">No.</th>
+                              <th className="px-3 py-2 text-left font-semibold">Description</th>
+                              <th className="px-3 py-2 text-right font-semibold">Qty</th>
+                              <th className="px-3 py-2 text-center font-semibold">Unit</th>
+                              <th className="px-3 py-2 text-right font-semibold">Unit Price</th>
+                              <th className="px-3 py-2 text-right font-semibold">Net Worth</th>
+                              <th className="px-3 py-2 text-center font-semibold">VAT %</th>
+                              <th className="px-3 py-2 text-right font-semibold">Gross Worth</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {invoice.extracted_data.line_items.map((item: any, index: number) => (
+                              <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <td className="px-3 py-3 font-medium">{item.item_number}</td>
+                                <td className="px-3 py-3 max-w-xs">{item.description}</td>
+                                <td className="px-3 py-3 text-right">{item.quantity}</td>
+                                <td className="px-3 py-3 text-center">{item.unit}</td>
+                                <td className="px-3 py-3 text-right">${item.unit_price?.toFixed(2)}</td>
+                                <td className="px-3 py-3 text-right font-medium">${item.net_worth?.toFixed(2)}</td>
+                                <td className="px-3 py-3 text-center">{item.vat_rate}%</td>
+                                <td className="px-3 py-3 text-right font-semibold">${item.gross_worth?.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 5. Financial Summary */}
+                  {invoice.extracted_data.financial_summary && (
+                    <div className="mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+                        5. Financial Summary
+                      </h3>
+                      <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Total Net Worth</td>
+                              <td className="px-4 py-3 text-right font-semibold">
+                                ${invoice.extracted_data.financial_summary.subtotal?.toFixed(2) || '0.00'}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Total VAT</td>
+                              <td className="px-4 py-3 text-right font-semibold">
+                                ${invoice.extracted_data.financial_summary.total_vat?.toFixed(2) || '0.00'}
+                              </td>
+                            </tr>
+                            {invoice.extracted_data.financial_summary.discount > 0 && (
+                              <tr>
+                                <td className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Discount</td>
+                                <td className="px-4 py-3 text-right font-semibold text-red-600">
+                                  -${invoice.extracted_data.financial_summary.discount?.toFixed(2)}
+                                </td>
+                              </tr>
+                            )}
+                            <tr className="bg-green-50 dark:bg-green-900/20">
+                              <td className="px-4 py-3 font-bold text-lg">Total Gross Worth</td>
+                              <td className="px-4 py-3 text-right font-bold text-lg text-green-600">
+                                ${invoice.extracted_data.financial_summary.total?.toFixed(2) || '0.00'}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Card 2: Invoice Preview for Accounting Insertion */}
+                <Card className="p-6 border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-semibold flex items-center">
+                      <Check className="h-5 w-5 mr-2 text-blue-600" />
+                      Invoice Preview - Ready for Accounting
+                    </h2>
+                    <Badge className="bg-blue-600">
+                      {invoice.status === 'approved' ? 'Approved' : 'Pending Approval'}
+                    </Badge>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-6 space-y-6">
+                    {/* Header Section */}
+                    <div className="flex justify-between items-start border-b pb-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {invoice.extracted_data.seller?.company_name || 'Vendor Name'}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {invoice.extracted_data.seller?.address || 'Vendor Address'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">INVOICE</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">
+                          #{invoice.extracted_data.general_info?.invoice_number || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {invoice.extracted_data.general_info?.date_of_issue || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Bill To */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bill To</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {invoice.extracted_data.client?.company_name || 'Client Name'}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {invoice.extracted_data.client?.address || 'Client Address'}
+                      </p>
+                    </div>
+
+                    {/* Line Items Summary */}
+                    <div>
+                      <table className="w-full text-sm">
+                        <thead className="border-b-2 border-gray-300 dark:border-gray-700">
+                          <tr>
+                            <th className="text-left py-2 font-semibold">Description</th>
+                            <th className="text-right py-2 font-semibold">Qty</th>
+                            <th className="text-right py-2 font-semibold">Price</th>
+                            <th className="text-right py-2 font-semibold">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                          {invoice.extracted_data.line_items?.slice(0, 5).map((item: any, index: number) => (
+                            <tr key={index}>
+                              <td className="py-2">{item.description}</td>
+                              <td className="text-right py-2">{item.quantity} {item.unit}</td>
+                              <td className="text-right py-2">${item.unit_price?.toFixed(2)}</td>
+                              <td className="text-right py-2 font-medium">${item.gross_worth?.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                          {invoice.extracted_data.line_items?.length > 5 && (
+                            <tr>
+                              <td colSpan={4} className="py-2 text-center text-sm text-gray-500 italic">
+                                + {invoice.extracted_data.line_items.length - 5} more items
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Totals */}
+                    <div className="border-t-2 border-gray-300 dark:border-gray-700 pt-4">
+                      <div className="flex justify-end space-y-2">
+                        <div className="w-64 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
+                            <span className="font-medium">
+                              ${invoice.extracted_data.financial_summary?.subtotal?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">Tax:</span>
+                            <span className="font-medium">
+                              ${invoice.extracted_data.financial_summary?.total_vat?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                          {invoice.extracted_data.financial_summary?.discount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600 dark:text-gray-400">Discount:</span>
+                              <span className="font-medium text-red-600">
+                                -${invoice.extracted_data.financial_summary.discount.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-lg font-bold border-t pt-2">
+                            <span>Total:</span>
+                            <span className="text-green-600">
+                              ${invoice.extracted_data.financial_summary?.total?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Terms */}
+                    {invoice.extracted_data.general_info?.payment_terms && (
+                      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                          Payment Terms
+                        </p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          {invoice.extracted_data.general_info.payment_terms}
+                        </p>
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Invoice Details */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Invoice Information</h3>
-                  <div className="grid grid-cols-2 gap-3 bg-white dark:bg-gray-900 p-4 rounded-lg">
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Invoice Number</p>
-                      <p className="font-semibold">{invoice.invoice_number || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">Invoice Date</p>
-                      <p className="font-semibold">{invoice.invoice_date ? formatDate(invoice.invoice_date) : 'N/A'}</p>
-                    </div>
-                    {invoice.due_date && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">Due Date</p>
-                        <p className="font-semibold">{formatDate(invoice.due_date)}</p>
-                      </div>
-                    )}
-                    {invoice.po_number && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">PO Number</p>
-                        <p className="font-semibold">{invoice.po_number}</p>
-                      </div>
-                    )}
-                    {invoice.payment_terms && (
-                      <div className="col-span-2">
-                        <p className="text-xs font-medium text-gray-500 mb-1">Payment Terms</p>
-                        <p className="text-sm">{invoice.payment_terms}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Financial Summary */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Financial Summary</h3>
-                  <div className="bg-white dark:bg-gray-900 p-4 rounded-lg space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Subtotal</span>
-                      <span className="font-semibold">{formatCurrency(invoice.subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Tax</span>
-                      <span className="font-semibold">{formatCurrency(invoice.tax_total)}</span>
-                    </div>
-                    {invoice.discount > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Discount</span>
-                        <span className="font-semibold text-red-600">-{formatCurrency(invoice.discount)}</span>
-                      </div>
-                    )}
-                    <div className="border-t pt-2 mt-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-base font-semibold">Total</span>
-                        <span className="text-lg font-bold text-green-600">{formatCurrency(invoice.total)}</span>
-                      </div>
+                  {/* Action Buttons */}
+                  <div className="mt-6 pt-6 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center">
+                      Review the invoice details above. When ready, approve to sync with your accounting tool.
+                    </p>
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={handleReject}
+                        variant="outline" 
+                        className="flex-1"
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        Reject
+                      </Button>
+                      <Button 
+                        onClick={handleApprove}
+                        disabled={invoice.status === 'approved'}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        {invoice.status === 'approved' ? 'Already Approved' : 'Approve & Sync'}
+                      </Button>
                     </div>
                   </div>
-                </div>
-
-                {/* Line Items */}
-                {invoice.line_items && invoice.line_items.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Line Items</h3>
-                    <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden">
+                </Card>
+              </>
+            )}
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-800">
                           <tr>
