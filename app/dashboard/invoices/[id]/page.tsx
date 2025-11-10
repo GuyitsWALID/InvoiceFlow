@@ -61,11 +61,6 @@ export default function InvoiceDetailPage() {
   }
 
   const handleAnalyzeWithAI = async () => {
-    if (!invoice?.raw_ocr) {
-      toast.error('No OCR text available. Please wait for OCR processing to complete.')
-      return
-    }
-
     setAnalyzing(true)
     const toastId = toast.loading('🤖 Analyzing invoice with AI...')
 
@@ -336,8 +331,8 @@ export default function InvoiceDetailPage() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No OCR text available yet</p>
-                  <p className="text-sm">OCR processing may still be running</p>
+                  <p>No OCR text extracted yet</p>
+                  <p className="text-sm">Click "Analyze with AI" to extract and analyze</p>
                 </div>
               )}
 
@@ -345,24 +340,27 @@ export default function InvoiceDetailPage() {
               <div className="mt-6">
                 <Button
                   onClick={handleAnalyzeWithAI}
-                  disabled={analyzing || !invoice.raw_ocr}
+                  disabled={analyzing}
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                   size="lg"
                 >
                   {analyzing ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Analyzing with AI...
+                      {invoice.raw_ocr ? 'Analyzing with AI...' : 'Extracting OCR & Analyzing...'}
                     </>
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-5 w-5" />
-                      Analyze with AI
+                      {invoice.raw_ocr ? 'Analyze with AI' : 'Extract OCR & Analyze with AI'}
                     </>
                   )}
                 </Button>
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  AI will extract all invoice fields using vision + OCR
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                  {invoice.raw_ocr 
+                    ? 'Uses Google Gemini to extract structured data from the invoice'
+                    : 'First extracts OCR text, then uses AI to analyze invoice data'
+                  }
                 </p>
               </div>
             </Card>

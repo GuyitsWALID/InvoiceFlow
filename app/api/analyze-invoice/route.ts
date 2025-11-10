@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 // Initialize Supabase service role client
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +22,7 @@ export async function POST(request: NextRequest) {
     
     console.log('🤖 AI Analysis started for invoice:', invoice_id)
 
-    // 1. Fetch invoice with raw OCR text
+    // 1. Fetch invoice
     const { data: invoice, error: fetchError } = await supabaseAdmin
       .from('invoices')
       .select('*')
@@ -36,10 +39,6 @@ export async function POST(request: NextRequest) {
       has_attachment: !!invoice.attachment_urls?.[0]
     })
 
-    if (!invoice.raw_ocr) {
-      return NextResponse.json({ error: 'No OCR text available. Please run OCR first.' }, { status: 400 })
-    }
-
     // 2. Download the invoice image
     const fileUrl = invoice.attachment_urls?.[0]
     if (!fileUrl) {
@@ -55,10 +54,11 @@ export async function POST(request: NextRequest) {
       .download(filePath)
 
     if (downloadError || !fileBlob) {
+      console.error('Download error:', downloadError)
       return NextResponse.json({ error: 'Failed to download invoice image' }, { status: 500 })
     }
 
-    // 3. Convert to base64 for Claude
+    // 3. Convert to base64
     const arrayBuffer = await fileBlob.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const base64Image = buffer.toString('base64')
@@ -66,18 +66,72 @@ export async function POST(request: NextRequest) {
     // Determine media type
     const mediaType = fileUrl.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
 
-    console.log('🖼️ Image prepared for AI analysis:', {
+    console.log('🖼️ Image prepared:', {
       size: fileBlob.size,
       type: mediaType
     })
 
-    // 4. Call Google Gemini Flash 2.0 (FREE - 1500 requests/day) with vision
-    console.log('🤖 Sending to Google Gemini Flash for analysis...')
+    // 4. Extract OCR if not already done
+    let rawOcr = invoice.raw_ocr
+    
+    if (!rawOcr) {
+      console.log('📄 Extracting OCR text from image...')
+      
+      const ocrResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GOOGLE_GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mediaType,
+                  data: base64Image
+                }
+              },
+              {
+                text: 'Extract ALL text from this invoice image. Return ONLY the raw text, exactly as it appears, preserving line breaks and formatting. No explanations, no markdown, just the text.'
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 2048
+          }
+        })
+      })
+
+      if (!ocrResponse.ok) {
+        const errorText = await ocrResponse.text()
+        console.error('OCR extraction failed:', errorText)
+        return NextResponse.json({ error: 'OCR extraction failed', details: errorText }, { status: 500 })
+      }
+
+      const ocrResult = await ocrResponse.json()
+      rawOcr = ocrResult.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      
+      console.log('✅ OCR extracted:', rawOcr.substring(0, 200))
+
+      // Save OCR to database
+      await supabaseAdmin
+        .from('invoices')
+        .update({ raw_ocr: rawOcr })
+        .eq('id', invoice_id)
+    }
+
+    if (!rawOcr || rawOcr.trim().length === 0) {
+      return NextResponse.json({ error: 'Failed to extract text from invoice image' }, { status: 400 })
+    }
+
+    // 5. Call Google Gemini Flash 2.0 for AI analysis with both image AND OCR text
+    console.log('🤖 Sending to Google Gemini Flash for AI analysis...')
     
     const prompt = `You are an expert invoice data extraction AI. Analyze this invoice image and extract ALL relevant information.
 
 OCR Text (for reference):
-${invoice.raw_ocr}
+${rawOcr}
 
 Extract the following fields with HIGH ACCURACY:
 1. vendor_name (company/person who sent the invoice)
@@ -97,7 +151,7 @@ Extract the following fields with HIGH ACCURACY:
 15. line_items (array of items with: description, quantity, unit_price, total)
 
 IMPORTANT:
-- Use the IMAGE as primary source, OCR text as backup
+- Use BOTH the IMAGE and OCR text to extract accurate data
 - Return ONLY valid JSON, no explanation
 - Use null for missing fields
 - Dates must be YYYY-MM-DD format
