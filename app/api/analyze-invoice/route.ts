@@ -208,16 +208,16 @@ Return ONLY valid JSON in this EXACT structure:
         }, { status: 500 })
       }
       
-      // Use Hugging Face Inference Providers - Meta Llama 3.1 for quality extraction
-      // Llama 3.1 supports chat completions and is excellent at structured tasks
-      console.log('📤 Making request to Hugging Face Inference Providers (Llama 3.1)...')
-      console.log('   Endpoint: https://router.huggingface.co/v1/chat/completions')
-      console.log('   Model: meta-llama/Llama-3.1-8B-Instruct')
+      // Use Hugging Face Free Inference API with Mistral-7B
+      // Mistral-7B is excellent at structured text extraction and JSON generation
+      console.log('📤 Making request to Hugging Face Inference API (Mistral-7B)...')
+      console.log('   Endpoint: https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2')
+      console.log('   Model: mistralai/Mistral-7B-Instruct-v0.2')
       console.log('   API Key present:', !!process.env.HUGGINGFACE_API_KEY)
       console.log('   Prompt length:', prompt.length)
       
       const response = await fetch(
-        'https://router.huggingface.co/v1/chat/completions',
+        'https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2',
         {
           method: 'POST',
           headers: {
@@ -225,16 +225,12 @@ Return ONLY valid JSON in this EXACT structure:
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'meta-llama/Llama-3.1-8B-Instruct',
-            messages: [
-              {
-                role: 'user',
-                content: prompt
-              }
-            ],
-            max_tokens: 4096,
-            temperature: 0.1,
-            stream: false
+            inputs: prompt,
+            parameters: {
+              max_new_tokens: 4096,
+              temperature: 0.1,
+              return_full_text: false
+            }
           })
         }
       )
@@ -281,18 +277,18 @@ Return ONLY valid JSON in this EXACT structure:
       
       console.log('🤖 Full AI response:', JSON.stringify(aiResponse, null, 2))
       
-      // Parse response - new API uses OpenAI-compatible format
+      // Parse response - Free tier API returns array with generated_text
       let responseText = ''
       
-      if (aiResponse.choices && aiResponse.choices[0]?.message?.content) {
-        // OpenAI-compatible format (new API)
-        responseText = aiResponse.choices[0].message.content
-      } else if (aiResponse.generated_text) {
-        // Old format
-        responseText = aiResponse.generated_text
-      } else if (aiResponse[0]?.generated_text) {
-        // Old array format
+      if (aiResponse[0]?.generated_text) {
+        // Free tier Inference API format (array)
         responseText = aiResponse[0].generated_text
+      } else if (aiResponse.generated_text) {
+        // Alternative format
+        responseText = aiResponse.generated_text
+      } else if (aiResponse.choices && aiResponse.choices[0]?.message?.content) {
+        // OpenAI-compatible format (PRO tier)
+        responseText = aiResponse.choices[0].message.content
       } else {
         console.error('❌ Unknown response format:', aiResponse)
         return NextResponse.json({ 
