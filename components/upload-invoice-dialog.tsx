@@ -165,6 +165,47 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         company_id: userData.company_id
       })
 
+      // Check invoice limit before uploading
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select(`
+          subscription_plan_id,
+          subscription_plan:subscription_plans(
+            display_name,
+            max_invoices_per_month
+          )
+        `)
+        .eq('id', userData.company_id)
+        .single()
+
+      if (!companyError && companyData) {
+        const subscriptionPlan = Array.isArray(companyData.subscription_plan)
+          ? companyData.subscription_plan[0]
+          : companyData.subscription_plan
+        const maxInvoices = subscriptionPlan?.max_invoices_per_month
+        if (maxInvoices && maxInvoices > 0) {
+          const startOfMonth = new Date()
+          startOfMonth.setDate(1)
+          startOfMonth.setHours(0, 0, 0, 0)
+
+          const { count, error: countError } = await supabase
+            .from('invoices')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', userData.company_id)
+            .gte('created_at', startOfMonth.toISOString())
+
+          if (!countError && count !== null && count >= maxInvoices) {
+            setError(`You've reached your plan limit of ${maxInvoices} invoice${maxInvoices > 1 ? 's' : ''} per month. Upgrade to Pro for unlimited invoices!`)
+            setUploading(false)
+            // Redirect to plans page after 2 seconds
+            setTimeout(() => {
+              router.push('/dashboard/plans')
+            }, 2000)
+            return
+          }
+        }
+      }
+
       const totalFiles = selectedFiles.length
       let uploadedCount = 0
 
@@ -296,6 +337,47 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
         setUploading(false)
         return
+      }
+
+      // Check invoice limit before uploading
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select(`
+          subscription_plan_id,
+          subscription_plan:subscription_plans(
+            display_name,
+            max_invoices_per_month
+          )
+        `)
+        .eq('id', userData.company_id)
+        .single()
+
+      if (!companyError && companyData) {
+        const subscriptionPlan = Array.isArray(companyData.subscription_plan)
+          ? companyData.subscription_plan[0]
+          : companyData.subscription_plan
+        const maxInvoices = subscriptionPlan?.max_invoices_per_month
+        if (maxInvoices && maxInvoices > 0) {
+          const startOfMonth = new Date()
+          startOfMonth.setDate(1)
+          startOfMonth.setHours(0, 0, 0, 0)
+
+          const { count, error: countError } = await supabase
+            .from('invoices')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', userData.company_id)
+            .gte('created_at', startOfMonth.toISOString())
+
+          if (!countError && count !== null && count >= maxInvoices) {
+            setError(`You've reached your plan limit of ${maxInvoices} invoice${maxInvoices > 1 ? 's' : ''} per month. Upgrade to Pro for unlimited invoices!`)
+            setUploading(false)
+            // Redirect to plans page after 2 seconds
+            setTimeout(() => {
+              router.push('/dashboard/plans')
+            }, 2000)
+            return
+          }
+        }
       }
 
       console.log('✅ User profile found (Google Drive):', {
@@ -455,6 +537,47 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         setError('User profile not found. Please run STEP 2 in supabase/IMMEDIATE_FIX.sql')
         setUploading(false)
         return
+      }
+
+      // Check invoice limit before uploading
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select(`
+          subscription_plan_id,
+          subscription_plan:subscription_plans(
+            display_name,
+            max_invoices_per_month
+          )
+        `)
+        .eq('id', userData.company_id)
+        .single()
+
+      if (!companyError && companyData) {
+        const subscriptionPlan = Array.isArray(companyData.subscription_plan)
+          ? companyData.subscription_plan[0]
+          : companyData.subscription_plan
+        const maxInvoices = subscriptionPlan?.max_invoices_per_month
+        if (maxInvoices && maxInvoices > 0) {
+          const startOfMonth = new Date()
+          startOfMonth.setDate(1)
+          startOfMonth.setHours(0, 0, 0, 0)
+
+          const { count, error: countError } = await supabase
+            .from('invoices')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', userData.company_id)
+            .gte('created_at', startOfMonth.toISOString())
+
+          if (!countError && count !== null && count >= maxInvoices) {
+            setError(`You've reached your plan limit of ${maxInvoices} invoice${maxInvoices > 1 ? 's' : ''} per month. Upgrade to Pro for unlimited invoices!`)
+            setUploading(false)
+            // Redirect to plans page after 2 seconds
+            setTimeout(() => {
+              router.push('/dashboard/plans')
+            }, 2000)
+            return
+          }
+        }
       }
 
       console.log('✅ User profile found (Dropbox):', {

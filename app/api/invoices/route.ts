@@ -67,6 +67,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
+  // Get company with subscription plan
+  const { data: companyData } = await supabase
+    .from('companies')
+    .select(`
+      id,
+      subscription_plan_id,
+      subscription_plan:subscription_plans(
+        max_invoices_per_month
+      )
+    `)
+    .eq('id', userData.company_id)
+    .single()
+
+  if (!companyData) {
+    return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+  }
+
+  // Check invoice limit for the current month
+  const subscriptionPlan = Array.isArray(companyData.subscription_plan) 
+    ? companyData.subscription_plan[0] 
+    : companyData.subscription_plan
+  const maxInvoices = subscriptionPlan?.max_invoices_per_month
+  if (maxInvoices && maxInvoices > 0) {
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+
+    const { count, error: countError } = await supabase
+      .from('invoices')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', userData.company_id)
+      .gte('created_at', startOfMonth.toISOString())
+
+    if (countError) {
+      console.error('Error counting invoices:', countError)
+    } else if (count !== null && count >= maxInvoices) {
+      return NextResponse.json({ 
+        error: 'Invoice limit reached',
+        message: `You've reached your plan limit of ${maxInvoices} invoice${maxInvoices > 1 ? 's' : ''} per month. Upgrade to Pro for unlimited invoices.`,
+        upgrade_required: true
+      }, { status: 403 })
+    }
+  }
+
   // Create invoice
   const { data: invoice, error } = await supabase
     .from('invoices')

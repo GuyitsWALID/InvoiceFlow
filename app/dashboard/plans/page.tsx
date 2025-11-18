@@ -15,7 +15,15 @@ interface SubscriptionPlan {
   price_monthly: number
   price_yearly: number
   max_team_members: number
-  features: string[]
+  max_invoices_per_month: number
+  features: {
+    ocr: boolean
+    ai_extraction: boolean
+    accounting_sync: boolean
+    email_integration: boolean
+    team_management: boolean
+    priority_support?: boolean
+  }
   is_popular?: boolean
 }
 
@@ -85,7 +93,7 @@ export default function PlansPage() {
       if (plansData) {
         setPlans(plansData.map(plan => ({
           ...plan,
-          is_popular: plan.name === 'PROFESSIONAL'
+          is_popular: plan.name === 'PRO'
         })))
       }
 
@@ -141,11 +149,13 @@ export default function PlansPage() {
     
     if (billingCycle === 'yearly') {
       const monthlyEquivalent = price / 12
+      const savings = Math.round(((plan.price_monthly * 12 - price) / (plan.price_monthly * 12)) * 100)
       return (
         <div>
-          <span className="text-3xl font-bold">${monthlyEquivalent.toFixed(0)}</span>
+          <span className="text-3xl font-bold">${monthlyEquivalent.toFixed(2)}</span>
           <span className="text-gray-600">/month</span>
-          <div className="text-sm text-gray-500">Billed ${price}/year</div>
+          <div className="text-sm text-green-600 font-semibold">Save ${(plan.price_monthly * 12 - price).toFixed(2)}/year</div>
+          <div className="text-xs text-gray-500">Billed ${price}/year</div>
         </div>
       )
     }
@@ -177,15 +187,49 @@ export default function PlansPage() {
     switch (planName) {
       case 'FREE':
         return <UsersIcon className="h-6 w-6" />
-      case 'STARTER':
-        return <Building2 className="h-6 w-6" />
-      case 'PROFESSIONAL':
-        return <Sparkles className="h-6 w-6" />
-      case 'ENTERPRISE':
+      case 'PRO':
         return <Crown className="h-6 w-6" />
       default:
         return <UsersIcon className="h-6 w-6" />
     }
+  }
+
+  const getPlanFeatures = (plan: SubscriptionPlan): string[] => {
+    const features: string[] = []
+    
+    if (plan.max_invoices_per_month === 1) {
+      features.push('1 invoice limit')
+    } else {
+      features.push('Unlimited invoices')
+    }
+    
+    if (plan.features.ocr) {
+      features.push('OCR text extraction')
+    }
+    
+    if (plan.features.ai_extraction) {
+      features.push('AI-powered data extraction')
+    }
+    
+    if (plan.features.accounting_sync) {
+      features.push('QuickBooks sync')
+    }
+    
+    if (plan.features.email_integration) {
+      features.push('Email integration')
+    }
+    
+    if (plan.features.team_management) {
+      features.push('Unlimited team members')
+    } else {
+      features.push('No team management')
+    }
+    
+    if (plan.features.priority_support) {
+      features.push('Priority support')
+    }
+    
+    return features
   }
 
   if (loading) {
@@ -240,15 +284,15 @@ export default function PlansPage() {
             }`}
           >
             Yearly
-            <span className="ml-1.5 text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
-              Save 17%
+            <span className="ml-1.5 text-xs bg-green-500 text-white px-2 py-0.5 rounded font-bold">
+              Save 2 months!
             </span>
           </button>
         </div>
       </div>
 
       {/* Plans Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+      <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
         {plans.map((plan) => (
           <Card
             key={plan.id}
@@ -287,15 +331,17 @@ export default function PlansPage() {
               <div className="flex items-center gap-2 text-sm font-medium pb-3 border-b">
                 <UsersIcon className="h-4 w-4 text-gray-400" />
                 <span>
-                  {plan.max_team_members === -1
-                    ? 'Unlimited members'
-                    : `Up to ${plan.max_team_members} ${plan.max_team_members === 1 ? 'member' : 'members'}`}
+                  {plan.max_team_members === 1
+                    ? 'Solo user only'
+                    : plan.max_team_members === -1 || plan.max_team_members > 100
+                    ? 'Unlimited team members'
+                    : `Up to ${plan.max_team_members} members`}
                 </span>
               </div>
 
               {/* Features */}
               <ul className="space-y-3">
-                {plan.features.map((feature, index) => (
+                {getPlanFeatures(plan).map((feature, index) => (
                   <li key={index} className="flex items-start gap-2 text-sm">
                     <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700">{feature}</span>
@@ -350,13 +396,13 @@ export default function PlansPage() {
 
       {/* FAQ or Additional Info */}
       <div className="max-w-3xl mx-auto mt-16 text-center">
-        <h2 className="text-2xl font-bold mb-4">Need help choosing?</h2>
+        <h2 className="text-2xl font-bold mb-4">Simple, Transparent Pricing</h2>
         <p className="text-gray-600 mb-6">
-          All plans include OCR processing, AI-powered data extraction, and QuickBooks integration.
-          Upgrade anytime as your team grows.
+          Start free with 1 invoice. Upgrade to Pro for unlimited invoices, team collaboration, 
+          and QuickBooks sync. Cancel anytime.
         </p>
         <Button variant="outline" asChild>
-          <a href="mailto:support@invoiceflow.com">Contact Sales</a>
+          <a href="mailto:support@invoiceflow.com">Contact Support</a>
         </Button>
       </div>
     </div>

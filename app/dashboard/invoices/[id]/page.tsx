@@ -802,43 +802,6 @@ export default function InvoiceDetailPage() {
                 </Card>
               </>
             )}
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-800">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Description</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-400">Qty</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-400">Unit Price</th>
-                            <th className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-400">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                          {invoice.line_items.map((item, index) => (
-                            <tr key={item.id || index}>
-                              <td className="px-3 py-2">{item.description}</td>
-                              <td className="px-3 py-2 text-right">{item.quantity}</td>
-                              <td className="px-3 py-2 text-right">{formatCurrency(item.unit_price)}</td>
-                              <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* AI Confidence Score */}
-                {invoice.confidence && (
-                  <div className="pt-4 border-t border-purple-200 dark:border-purple-800">
-                    <div className="flex items-center justify-between bg-white dark:bg-gray-900 p-3 rounded-lg">
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">AI Confidence Score</span>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-300">
-                        {Math.round((invoice.confidence.overall || 0) * 100)}% Accurate
-                      </Badge>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            )}
           </div>
         </div>
       </div>

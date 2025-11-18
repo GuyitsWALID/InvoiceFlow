@@ -23,10 +23,8 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
 
 -- Insert default plans
 INSERT INTO subscription_plans (id, name, display_name, description, price_monthly, price_yearly, max_team_members, max_invoices_per_month, features) VALUES
-  ('free', 'free', 'Free', 'Perfect for getting started', 0, 0, 1, 10, '{"ocr": true, "ai_extraction": false, "accounting_sync": false, "email_integration": false}'::jsonb),
-  ('starter', 'starter', 'Starter', 'For small businesses', 29, 290, 3, 100, '{"ocr": true, "ai_extraction": true, "accounting_sync": true, "email_integration": true}'::jsonb),
-  ('professional', 'professional', 'Professional', 'For growing teams', 79, 790, 10, 500, '{"ocr": true, "ai_extraction": true, "accounting_sync": true, "email_integration": true, "api_access": true}'::jsonb),
-  ('enterprise', 'enterprise', 'Enterprise', 'For large organizations', 199, 1990, 999, 999999, '{"ocr": true, "ai_extraction": true, "accounting_sync": true, "email_integration": true, "api_access": true, "priority_support": true, "custom_workflows": true}'::jsonb)
+  ('free', 'FREE', 'Free', 'Perfect for getting started', 0, 0, 1, 1, '{"ocr": true, "ai_extraction": true, "accounting_sync": false, "email_integration": false, "team_management": false}'::jsonb),
+  ('pro', 'PRO', 'Pro', 'For small businesses and teams', 9.99, 99.99, 999, 999999, '{"ocr": true, "ai_extraction": true, "accounting_sync": true, "email_integration": true, "team_management": true, "priority_support": true}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
