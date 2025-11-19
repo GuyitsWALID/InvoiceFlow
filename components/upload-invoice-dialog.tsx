@@ -117,8 +117,8 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0) return
+  const handleUploadWithFiles = async (filesToUpload: File[]) => {
+    if (filesToUpload.length === 0) return
 
     setUploading(true)
     setError(null)
@@ -206,10 +206,10 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
         }
       }
 
-      const totalFiles = selectedFiles.length
+      const totalFiles = filesToUpload.length
       let uploadedCount = 0
 
-      for (const file of selectedFiles) {
+      for (const file of filesToUpload) {
         // Upload to Supabase Storage
         const fileExt = file.name.split('.').pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
@@ -301,6 +301,10 @@ function UploadInvoiceDialogContent({ onUploadComplete }: UploadInvoiceDialogPro
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleUpload = async () => {
+    await handleUploadWithFiles(selectedFiles)
   }
 
   const handleGoogleDrive = () => {

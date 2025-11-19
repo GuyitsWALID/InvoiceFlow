@@ -31,13 +31,9 @@ interface User {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inbox', href: '/dashboard/inbox', icon: Inbox },
-  { name: 'Needs Review', href: '/dashboard/review', icon: FileCheck },
-  { name: 'Approved', href: '/dashboard/approved', icon: CheckCircle2 },
-  { name: 'Synced', href: '/dashboard/synced', icon: Cloud },
-  { name: 'Rejected', href: '/dashboard/rejected', icon: FileX },
-  { name: 'Duplicates', href: '/dashboard/duplicates', icon: Copy },
+  { name: 'Upload Invoice', href: '/upload', icon: LayoutDashboard },
+  { name: 'Processed Invoices', href: '/dashboard/invoices', icon: FileCheck },
+  { name: 'Synced Invoices', href: '/dashboard/synced', icon: Cloud },
   { name: 'Team', href: '/dashboard/team', icon: Users },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]

@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import {
   Upload,
   FileText,
@@ -22,11 +24,35 @@ import {
   Lock,
   Check,
   ChevronRight,
+  X,
 } from 'lucide-react'
 
 export default function LandingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
   const [isDragging, setIsDragging] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const supabase = createClient()
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsAuthenticated(!!session)
+      setIsLoading(false)
+    }
+    checkAuth()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -40,8 +66,75 @@ export default function LandingPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    // Redirect to signup with file
-    window.location.href = '/signup'
+    
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0 && files[0]) {
+      // Check if user is authenticated
+      if (isAuthenticated) {
+        // If authenticated, redirect to upload page with file
+        const reader = new FileReader()
+        reader.onload = () => {
+          sessionStorage.setItem('pendingInvoiceFile', JSON.stringify({
+            name: files[0].name,
+            type: files[0].type,
+            size: files[0].size,
+            data: reader.result as string
+          }))
+          router.push('/upload')
+        }
+        reader.readAsDataURL(files[0])
+      } else {
+        // Not authenticated, store file and prompt for auth
+        setPendingFile(files[0])
+        const reader = new FileReader()
+        reader.onload = () => {
+          sessionStorage.setItem('pendingInvoiceFile', JSON.stringify({
+            name: files[0].name,
+            type: files[0].type,
+            size: files[0].size,
+            data: reader.result as string
+          }))
+        }
+        reader.readAsDataURL(files[0])
+        setShowAuthModal(true)
+      }
+    }
+  }
+
+  const handleFileSelect = (file: File) => {
+    // Check if user is authenticated
+    if (isAuthenticated) {
+      // If authenticated, redirect to upload page with file
+      const reader = new FileReader()
+      reader.onload = () => {
+        sessionStorage.setItem('pendingInvoiceFile', JSON.stringify({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: reader.result as string
+        }))
+        router.push('/upload')
+      }
+      reader.readAsDataURL(file)
+    } else {
+      // Not authenticated, store file and prompt for auth
+      setPendingFile(file)
+      const reader = new FileReader()
+      reader.onload = () => {
+        sessionStorage.setItem('pendingInvoiceFile', JSON.stringify({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: reader.result as string
+        }))
+      }
+      reader.readAsDataURL(file)
+      setShowAuthModal(true)
+    }
+  }
+
+  const handleAuthRedirect = (path: string) => {
+    window.location.href = path
   }
 
   return (
@@ -79,12 +172,24 @@ export default function LandingPage() {
 
             <div className="flex items-center space-x-3">
               <ThemeToggle />
-              <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
-                <Link href="/login">Sign In</Link>
-              </Button>
-              <Button size="sm" className="bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] hover:scale-105 transition-transform shadow-lg" asChild>
-                <Link href="/signup">Start for Free</Link>
-              </Button>
+              {!isLoading && (
+                <>
+                  {isAuthenticated ? (
+                    <Button size="sm" className="bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] hover:scale-105 transition-transform shadow-lg" asChild>
+                      <Link href="/dashboard/inbox">Go to Dashboard</Link>
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                        <Link href="/login">Sign In</Link>
+                      </Button>
+                      <Button size="sm" className="bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] hover:scale-105 transition-transform shadow-lg" asChild>
+                        <Link href="/signup">Start for Free</Link>
+                      </Button>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -247,11 +352,18 @@ export default function LandingPage() {
                 <Button 
                   size="lg" 
                   className="bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] hover:scale-105 transition-transform px-8 rounded-full" 
-                  asChild
+                  onClick={() => {
+                    const input = document.createElement('input')
+                    input.type = 'file'
+                    input.accept = '.pdf,.png,.jpg,.jpeg'
+                    input.onchange = (e: any) => {
+                      const files = Array.from(e.target.files || []) as File[]
+                      if (files[0]) handleFileSelect(files[0])
+                    }
+                    input.click()
+                  }}
                 >
-                  <Link href="/signup">
-                    Choose File
-                  </Link>
+                  Choose File
                 </Button>
 
                 <div className="flex items-center gap-2 text-xs text-[#64748B]">
@@ -706,6 +818,57 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 flex items-center justify-center">
+                <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Sign in to process your invoice
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {pendingFile ? `"${pendingFile.name}" is ready to process.` : 'Create an account or sign in to continue.'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  onClick={() => handleAuthRedirect('/signup')}
+                >
+                  Create Free Account
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleAuthRedirect('/login')}
+                >
+                  Sign In
+                </Button>
+              </div>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Your file will be processed after authentication
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const next = requestUrl.searchParams.get('next')
   const origin = requestUrl.origin
 
   if (code) {
@@ -50,8 +51,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Redirect to dashboard
-      return NextResponse.redirect(`${origin}/dashboard`)
+      // Redirect to specified next URL or default to dashboard inbox
+      const redirectUrl = next || '/dashboard/inbox'
+      return NextResponse.redirect(`${origin}${redirectUrl}`)
     }
   }
 

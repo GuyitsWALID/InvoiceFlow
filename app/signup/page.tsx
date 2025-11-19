@@ -60,8 +60,13 @@ export default function SignupPage() {
         return
       }
 
-      // Redirect to dashboard
-      router.push('/dashboard')
+      // Check if there's a pending file to upload after auth
+      const pendingFile = sessionStorage.getItem('pendingInvoiceFile')
+      if (pendingFile) {
+        router.push('/upload')
+      } else {
+        router.push('/dashboard/inbox')
+      }
       router.refresh()
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred')
@@ -73,10 +78,14 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
+    // Check if there's a pending file
+    const pendingFile = sessionStorage.getItem('pendingInvoiceFile')
+    const redirectPath = pendingFile ? '/upload' : '/dashboard/inbox'
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${redirectPath}`,
       },
     })
 
